@@ -1,4 +1,4 @@
-setwd("C:/Users/bawj/Downloads/School/Year 2/BC2407/Project")
+setwd(getwd())
 
 #### GENERATING SYNTHETIC BALANCED DATA WITH ROSE ALGORITHM ####
 # library(data.table)
@@ -110,17 +110,17 @@ summary(log.rose)
 threshold = 0.5
 
 # Confusion Matrix Naive
-prob.test.naive <- predict(log.naive, newdata = testset, type = 'response')
-log.predict.test.naive <- ifelse(prob.test.naive > threshold, "churn", "not churn")
-confusionMatrix(as.factor(log.predict.test.naive), reference=testset$is_churn, positive="churn", mode="prec_recall")
-auc(testset$is_churn, prob.test.naive)
+log.predict.naive <- predict(log.naive, newdata = testset, type = 'response')
+log.class.naive <- ifelse(log.predict.naive > threshold, "churn", "not churn")
+confusionMatrix(as.factor(log.class.naive), reference=testset$is_churn, positive="churn", mode="prec_recall")
+auc(testset$is_churn, log.predict.naive)
 
 # Confusion Matrix ROSE
-prob.test <- predict(log.rose, newdata = testset, type = 'response')
-log.rose.predict.test <- ifelse(prob.test > threshold, "churn", "not churn")
-confusionMatrix(as.factor(log.rose.predict.test), reference=testset$is_churn, positive="churn", mode="prec_recall")
+log.predict.rose <- predict(log.rose, newdata = testset, type = 'response')
+log.class.rose <- ifelse(log.predict.rose > threshold, "churn", "not churn")
+confusionMatrix(as.factor(log.class.rose), reference=testset$is_churn, positive="churn", mode="prec_recall")
 
-auc(testset$is_churn, prob.test)
+auc(testset$is_churn, log.predict.rose)
 
 #### END LOGISTIC REGRESSION ####
 
