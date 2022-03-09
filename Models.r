@@ -87,14 +87,16 @@ summary(cleandf)
 library(caTools)
 library(caret)
 library(ROSE)
+library(pROC)
 set.seed(2407)
 
 train <- sample.split(Y = cleandf$is_churn, SplitRatio = 0.7)
 trainset.naive <- subset(cleandf, train == T)
-trainset.rose = ROSE(is_churn~., data=trainset, seed=2407)$data
+trainset.rose = ROSE(is_churn~., data=trainset.naive, seed=2407)$data
+testset <- subset(cleandf, train == F)
+summary(trainset.naive$is_churn)
 summary(trainset.rose$is_churn)
 summary(testset$is_churn)
-testset <- subset(cleandf, train == F)
 
 
 #### BEGIN LOGISTIC REGRESSION ####
@@ -102,7 +104,7 @@ log.naive = glm(is_churn ~ payment_method_id + plan_list_price + actual_amount_p
                   is_cancel + bd + gender + city + registered_via, family = binomial, data=trainset.naive)
 
 log.rose = glm(is_churn ~ payment_method_id + plan_list_price + actual_amount_paid + is_auto_renew + 
-           is_cancel + bd + gender + city + registered_via, family = binomial, data=trainset.rose) 
+                 is_cancel + bd + gender + city + registered_via, family = binomial, data=trainset.rose) 
 
 summary(log.rose)
 threshold = 0.5
@@ -111,11 +113,14 @@ threshold = 0.5
 prob.test.naive <- predict(log.naive, newdata = testset, type = 'response')
 log.predict.test.naive <- ifelse(prob.test.naive > threshold, "churn", "not churn")
 confusionMatrix(as.factor(log.predict.test.naive), reference=testset$is_churn, positive="churn", mode="prec_recall")
+auc(testset$is_churn, prob.test.naive)
 
 # Confusion Matrix ROSE
 prob.test <- predict(log.rose, newdata = testset, type = 'response')
 log.rose.predict.test <- ifelse(prob.test > threshold, "churn", "not churn")
 confusionMatrix(as.factor(log.rose.predict.test), reference=testset$is_churn, positive="churn", mode="prec_recall")
+
+auc(testset$is_churn, prob.test)
 
 #### END LOGISTIC REGRESSION ####
 
@@ -137,7 +142,7 @@ cart.naive = prune(cart, cp = cart.cp)
 cart.naive$variable.importance
 
 #proportion of importance
-round(100*cart.naive$variable.importance/sum(cart.naive$variable.importance))
+#round(100*cart.naive$variable.importance/sum(cart.naive$variable.importance))
 #plotcp(cart.naive)
 #rpart.plot(cart.naive, nn = T) #-> uncomment to see plot of CART model (commenting out for smooth running of code)
 
@@ -156,13 +161,16 @@ cart.rose$variable.importance
 round(100*cart.rose$variable.importance/sum(cart.rose$variable.importance))
 
 # confusion matrix naive
-cart.predict.naive = predict(cart.naive, newdata = testset, type="class")
-confusionMatrix(as.factor(cart.predict.naive), reference=testset$is_churn, positive="churn", mode="prec_recall")
+cart.predict.naive = predict(cart.naive, newdata = testset, type="prob")[,2]
+cart.class.naive = ifelse(cart.predict.naive > threshold, "churn", "not churn")
+confusionMatrix(as.factor(cart.class.naive), reference=testset$is_churn, positive="churn", mode="prec_recall")
+auc(testset$is_churn, cart.predict.naive)
 
 # confusion matrix naive
-cart.predict.rose = predict(cart.rose, newdata = testset, type="class")
-confusionMatrix(as.factor(cart.predict.rose), reference=testset$is_churn, positive="churn", mode="prec_recall")
-
+cart.predict.rose = predict(cart.rose, newdata = testset, type="prob")[,2]
+cart.class.rose = ifelse(cart.predict.rose > threshold, "churn", "not churn")
+confusionMatrix(as.factor(cart.class.rose), reference=testset$is_churn, positive="churn", mode="prec_recall")
+auc(testset$is_churn, cart.predict.rose)
 #### END OF CART ####
 
 #### BEGIN NEURAL NET ####
@@ -209,8 +217,8 @@ library(randomForest)
 set.seed(2407)
 
 rf.naive = randomForest(is_churn ~ is_auto_renew + actual_amount_paid + payment_method_id +
-                         plan_list_price + payment_plan_days + is_cancel, data = trainset.naive, importance=T,
-                       ntree=250)
+                          plan_list_price + payment_plan_days + is_cancel, data = trainset.naive, importance=T,
+                        ntree=250)
 rf.rose = randomForest(is_churn ~ is_auto_renew + actual_amount_paid + payment_method_id +
                          plan_list_price + payment_plan_days + is_cancel, data = trainset.rose, importance=T,
                        ntree=250)
@@ -218,12 +226,16 @@ rf.naive
 #precision
 850/(850+154)
 850/(850+7607)
+auc(trainset.naive$is_churn, rf.naive$votes[,2])
+
 rf.rose
 #precision and recall
 112418/(112418+8524)
 112418/(112418+5945)
+auc(trainset.rose$is_churn, rf.rose$votes[,2])
+
 plot(rf.rose)
-importance(rfmodel)
+importance(rf.rose)
 
 
 
