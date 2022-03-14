@@ -44,7 +44,7 @@ testset  <- subset(df, df_split == F)
 train.naive_target <- trainset.naive$is_churn
 train.rose_target <- trainset.rose$is_churn
 test_target <- testset$is_churn
-# convert factor types to numeric
+# convert factor types to numeric: churn is 1, renewal is 0
 train.naive_target = as.numeric(train.naive_target)-1
 train.rose_target = as.numeric(train.rose_target)-1
 test_target = as.numeric(test_target)-1
@@ -68,7 +68,7 @@ dtest = xgb.DMatrix(data = testMatrix, label = test_target)
 ### NAIVE
 params.naive1 = list(booster = "gbtree",
                objective = "binary:logistic",
-               eta=0.3, # aka learning rate, how much each tree contributes:
+               eta=0.1, # aka learning rate, how much each tree contributes:
                         #low val -> more robust to overfitting, longer compute time
                gamma=0, # loss reduction required to further partition (denominator)
                         # larger -> more conservative (less splits)
@@ -86,23 +86,24 @@ xgbcv.naive1 = xgb.cv(params = params.naive1,
                 stratified = T,
                 silent = F,
                 early_stopping_rounds = 20,
-                maximize = F
+                maximize = T,
+                eval_metric = "aucpr"
 )
 xgb.naive1 <- xgb.train(
     params = params.naive1,
     data = dtrain.naive,
-    nrounds = xgbcv.naive1$best_iteration,
+    nrounds = 300, #xgbcv.naive1$best_iteration,
     watchlist = list(val=dtest,train=dtrain.naive),
     print_every_n = 5,
     early_stopping_rounds = 10,
-    maximize = F ,
-    eval_metric = "auc"
-) ## eval_metric needs to be changed: suggested auc/aucpr
+    maximize = T ,
+    eval_metric = "aucpr"
+)
 
 ### ROSE
 params.rose1 = list(booster = "gbtree",
                      objective = "binary:logistic",
-                     eta=0.3, # aka learning rate, how much each tree contributes:
+                     eta=0.1, # aka learning rate, how much each tree contributes:
                      #low val -> more robust to overfitting, longer compute time
                      gamma=0, # loss reduction required to further partition (denominator)
                      # larger -> more conservative (less splits)
@@ -114,50 +115,53 @@ params.rose1 = list(booster = "gbtree",
 # find best number of iterations
 xgbcv.rose1 = xgb.cv(params = params.rose1,
                       data = dtrain.rose,
-                      nrounds = 300,
+                      nrounds = 500,
                       nfold = 5,
                       showsd = T,
                       stratified = T,
                       silent = F,
                       early_stopping_rounds = 20,
-                      maximize = F
+                      maximize = T,
+                      eval_metric = "aucpr"
 )
 xgb.rose1 <- xgb.train(
     params = params.rose1,
     data = dtrain.rose,
-    nrounds = xgbcv.rose1$best_iteration,
+    nrounds = 300, #xgbcv.rose1$best_iteration,
     watchlist = list(val=dtest,train=dtrain.rose),
     print_every_n = 5,
     early_stopping_rounds = 10,
-    maximize = F ,
-    eval_metric = "logloss"
+    maximize = T ,
+    eval_metric = "aucpr"
 )
-
+xgb.rose1
 
 
 # use cut off 0.5,
 CUT_OFF_HINGE_VAL = 0.5
 
-xgb.naive1_pred <- predict(xgb.naive1, dtest, type = "response")
+xgb.naive1_pred <- predict(object= xgb.naive1,
+                           newdata= dtest, type = "response")
 xgb.naive1_pred <- ifelse(xgb.naive1_pred>CUT_OFF_HINGE_VAL, 1, 0)
 
-cm.naive1 = confusionMatrix(factor(xgb.naive1_pred), factor(test_target))
+cm.naive1 = confusionMatrix(factor(xgb.naive1_pred), factor(test_target), positive ="1", mode="everything")
 cm.naive1
-cm.naive1[["byClass"]]["Precision"]
-cm.naive1[["byClass"]]["Recall"]
+cat("Precision [TP/(TP+FP)]: ",cm.naive1[["byClass"]]["Pos Pred Value"])
+cat("Recall    [TP/(TP+FN)]: ",cm.naive1[["byClass"]]["Sensitivity"])
 xgb.plot.importance(importance_matrix = xgb.importance(feature_names = colnames(train.naive_Matrix),
                                                        model = xgb.naive1)[1:20])
 
 #precision
 
 
-xgb.rose1_pred <- predict(xgb.rose1, dtest, type = "response")
+xgb.rose1_pred <- predict(object = xgb.rose1,
+                          newdata = dtest, type = "response")
 xgb.rose1_pred <- ifelse(xgb.rose1_pred>CUT_OFF_HINGE_VAL, 1, 0)
 
-cm.rose1 = confusionMatrix(factor(xgb.rose1_pred), factor(test_target))
+cm.rose1 = confusionMatrix(factor(xgb.rose1_pred), factor(test_target), positive="1",mode="everything")
 cm.rose1
-cm.rose1[["byClass"]]["Precision"]
-cm.rose1[["byClass"]]["Recall"]
+cat("Precision [TP/(TP+FP)]: ",cm.rose1[["byClass"]]["Pos Pred Value"])
+cat("Recall    [TP/(TP+FN)]: ",cm.rose1[["byClass"]]["Sensitivity"])
 xgb.plot.importance(importance_matrix = xgb.importance(feature_names = colnames(train.rose_Matrix),
                                                        model = xgb.rose1)[1:20])
 
