@@ -74,19 +74,22 @@ library(caret)
 library(Information)
 library(InformationValue)
 options(scipen = 999, digits=5)
+#obtain the IV values
+cleandf$is_churn = as.numeric(cleandf$is_churn)-1
+create_infotables(cleandf,y="is_churn")
 
-df = dummyVars(~., data=cleandf)
+cleandf$is_churn = factor(cleandf$is_churn, levels=c(0,1), labels=c("not churn", "churn"))
+
+#choose only higher IV variables
+df = dummyVars(~is_churn+payment_method_id+is_auto_renew+payment_plan_days+actual_amount_paid
+               +plan_list_price+registered_via+bd+is_cancel+city+gender, data=cleandf)
 df = data.frame(predict(df, newdata = cleandf))
-#create_infotables(df,y="is_churn.churn")
-finaldf = df[,c("is_churn.churn", "is_auto_renew.auto.renewal", "payment_plan_days.30", "actual_amount_paid", "plan_list_price", "payment_method_id.32",
-                "bd", "registered_via.7", "is_cancel.cancellation", "city.1", "gender.male", "num_25", "num_50", "num_75", "num_100", "num_unq",
-                "total_secs")]
 
 ### Correlation analysis ###
 library(dplyr)
 library(caret)
 
-cor = cor(finaldf,use="pairwise.complete.obs")
+cor = cor(df,use="pairwise.complete.obs")
 
 corTable = as.data.frame(as.table(cor))
 corTable = subset(corTable, abs(Freq) > 0.7 & abs(Freq) != 1)
@@ -95,20 +98,12 @@ corTable[!duplicated(corTable[,c('Freq')]),]
 cor = findCorrelation(cor, cutoff=0.7)
 #remove correlated columns
 cor
-colnames(finaldf)
-colnames(finaldf)[cor]
+colnames(df)[cor]
 #we want to keep  paymentplandays based on domain knowledge
-finalCor = c(5,16,17)
-finaldf = finaldf[,-c(finalCor)]
-cols = c("is_churn", "is_auto_renew.auto.renewal", "payment_plan_days.30", "payment_method_id.32")
-finaldf$is_churn.churn = factor(finaldf$is_churn.churn)
-finaldf$is_auto_renew.auto.renewal = factor(finaldf$is_auto_renew.auto.renewal)
-finaldf$payment_plan_days.30 = factor(finaldf$payment_plan_days.30)
-finaldf$payment_method_id.32 = factor(finaldf$payment_method_id.32)
-finaldf$registered_via.7 = factor(finaldf$registered_via.7)
-finaldf$is_cancel.cancellation = factor(finaldf$is_cancel.cancellation)
-finaldf$city.1 = factor(finaldf$city.1)
-finaldf$gender.male = factor(finaldf$gender.male)
+finaldf = df[,-c(cor)]
+
+finaldf[, -62] = lapply(finaldf[,-62], function (x) factor(x))
+finaldf$gender. = NULL
 
 #### OR LOAD SMOTE ####
 # df = read.csv("smote.csv", stringsAsFactors = T)
@@ -214,7 +209,7 @@ pr.curve(cart.predict.naive[testset$is_churn == "1"], cart.predict.naive[testset
 # confusion matrix rose
 cart.predict.rose = predict(cart.rose, newdata = testset, type="prob")[,2]
 cart.class.rose = ifelse(cart.predict.rose > threshold, 1, 0)
-confusionMatrix(as.factor(cart.class.rose), reference=testset$is_churn, positive="1", mode="prec_recall")
+caret::confusionMatrix(as.factor(cart.class.rose), reference=testset$is_churn, positive="1", mode="prec_recall")
 auc(testset$is_churn, cart.predict.rose)
 pr.curve(cart.predict.rose[testset$is_churn == "1"], cart.predict.rose[testset$is_churn == "0"])
 #### END OF CART ####
@@ -262,17 +257,23 @@ mean(roundedresultsdf$actual == roundedresultsdf$prediction)
 library(randomForest)
 set.seed(2407)
 
-rf.naive = randomForest(is_churn ~ ., data = trainset.naive,
-                        ntree=250)
+rf.naive = randomForest(is_churn ~ ., data = trainset.naive, importance=T,
+                        ntree=100)
 rf.predict.naive = predict(rf.naive, newdata = testset, type="prob")
-pr.curve(rf.predict.naive[testset$is_churn == "1", 1], rf.predict.naive[testset$is_churn == "0", 1])
-auc(testset$is_churn, rf.predict.naive[,1])
+rf.class.naive = ifelse(rf.predict.naive[,"1"] > threshold, 1, 0)
+caret::confusionMatrix(as.factor(rf.class.naive), reference=testset$is_churn, positive="1", mode="prec_recall")
+pr.curve(rf.predict.naive[testset$is_churn == "1", "1"], rf.predict.naive[testset$is_churn == "0", "1"])
+auc(testset$is_churn, rf.predict.naive[,"1"])
 
 rf.rose = randomForest(is_churn ~ ., data = trainset.rose, importance=T,
-                       ntree=250)
-rf.predict.rose = predict(rf.rose, newdata = testset, type="prob")
-pr.curve(scores.class0 = rf.predict.rose[testset$is_churn == "1", 1], scores.class1 = rf.predict.rose[testset$is_churn == "0", 1], curve=T)
-auc(testset$is_churn, rf.predict.rose[,1])
+                       ntree=100)
+rf.predict.rose = predict(rf.rose, newdata = testset, type="prob")[,"1"]
+
+rf.class.rose = ifelse(rf.predict.rose > threshold, 1, 0)
+caret::confusionMatrix(as.factor(rf.class.rose), reference=testset$is_churn, positive="1", mode="everything")
+pr.curve(rf.predict.rose[testset$is_churn == "1"], rf.predict.rose[testset$is_churn == "0"], curve=T)
+auc(testset$is_churn, rf.predict.rose)
+plot(roc(testset$is_churn, rf.predict.rose, plot=T))
 plot(rf.pr.rose)
 
 #precision
@@ -282,11 +283,12 @@ plot(rf.pr.rose)
 #precision and recall
 112418/(112418+8524)
 112418/(112418+5945)
+rf.naive
 rf.rose
 rf.predict.rose
 plot(rf.rose)
 importance(rf.rose)
-
+varImpPlot(rf.rose)
 
 
 
