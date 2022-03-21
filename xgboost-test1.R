@@ -1,6 +1,6 @@
 
 
-#### Loading in package and data####
+#### Libraries####
 library(xgboost)
 library(data.table)
 library(stringr)
@@ -11,43 +11,15 @@ library(Matrix)
 library(ROSE)
 library(lubridate)
 
-one_hot_path = "var_removed_one_hot.csv"
-setwd("C:/Users/shuny/Documents/UNI/BC2407 Analytics II/project/kkbox/code")
-df = fread(one_hot_path, encoding="UTF-8")
-df$bd = as.integer(df$bd)
-
-####ARCHIVE####
-# clean_path = "clean.csv"
-# setwd("C:/Users/shuny/Documents/UNI/BC2407 Analytics II/project/kkbox/code")
-# df = fread(clean_path, stringsAsFactors = T, encoding="UTF-8")
+#### File IO ####
 #
-# df$msno = NULL
-# df$is_churn = factor(df$is_churn, levels= c(0,1), labels=c("renewal","churn"))
-# df$payment_method_id = factor(df$payment_method_id)
-# df$is_auto_renew = factor(df$is_auto_renew, levels= c(0,1), labels=c("non-auto renewal","auto-renewal"))
-# df$transaction_date = ymd(df$transaction_date)
-# df$membership_expire_date = ymd(df$membership_expire_date)
-# df$is_cancel = factor(df$is_cancel, levels= c(0,1), labels=c("non-cancellation","cancellation"))
-# df$city = factor(df$city)
-# df$gender = factor(df$gender, levels=c("male","female"), labels =c("female","male"))
-# df$registered_via = factor(df$registered_via)
-# df$registration_init_time = ymd(df$registration_init_time)
-# df$date = ymd(df$date)
-# df$corrected_churn = NULL
-# df = df[complete.cases(df),] ## removed non complete cases for xgboost
-# df = df[,c("payment_method_id", "plan_list_price", "actual_amount_paid", "is_auto_renew", "is_cancel", "bd", "gender", "city", "registered_via","is_churn")]
-# summary(df)
-# str(df)
-
-#### Train Test Split####
-####
-set.seed(2407)
-df_split <- sample.split(Y = df$is_churn, SplitRatio = 0.7)
-trainset.naive <- subset(df, df_split == T)
-trainset.rose = ROSE(is_churn~., data=trainset.naive, seed=2407)$data
-setDT(trainset.rose)
-testset  <- subset(df, df_split == F)
-
+# setDT(trainset.naive)
+# setDT(trainset.rose)
+# setDT(testset)
+#
+# fwrite(trainset.naive, "trainset_naive.csv")
+# fwrite(trainset.rose, "trainset_rose.csv")
+# fwrite(testset, "testset.csv")
 
 trainset.naive = fread("trainset_naive.csv")
 trainset.rose = fread("trainset_rose.csv")
@@ -62,7 +34,7 @@ summary(testset$is_churn)
 
 
 
-#### Further processing: One hot encoding, DMatrix ####
+#### One hot encoding, DMatrix ####
 # convert to matrix representation
 train.naive_Matrix = sparse.model.matrix(~.+0, data= trainset.naive[,-c("is_churn"), with=F])
 train.rose_Matrix = sparse.model.matrix(~.+0, data= trainset.rose[,-c("is_churn"), with=F])
