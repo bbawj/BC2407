@@ -10,6 +10,8 @@ library(caTools)
 library(Matrix)
 library(ROSE)
 library(lubridate)
+library(PRROC)
+setwd("C:/Users/shuny/Documents/UNI/BC2407 Analytics II/project/kkbox/code")
 
 #### File IO ####
 #
@@ -25,13 +27,19 @@ trainset.naive = fread("trainset_naive.csv")
 trainset.rose = fread("trainset_rose.csv")
 testset = fread("testset.csv")
 
+trainset.naive$V1 = NULL
+trainset.rose$V1 = NULL
+testset$V1 = NULL
+
+
 train.naive_target <- trainset.naive$is_churn
 train.rose_target <- trainset.rose$is_churn
 test_target <- testset$is_churn
 summary(trainset.naive$is_churn)
 summary(trainset.rose$is_churn)
 summary(testset$is_churn)
-
+str(testset)
+summary(trainset.rose)
 
 
 #### One hot encoding, DMatrix ####
@@ -52,7 +60,7 @@ dtest = xgb.DMatrix(data = testMatrix, label = test_target)
 ##### NAIVE  #####
 params.naive1 = list(booster = "gbtree",
                objective = "binary:logistic",
-               eta=0.1, # aka learning rate, how much each tree contributes:
+               eta=0.01, # aka learning rate, how much each tree contributes:
                         #low val -> more robust to overfitting, longer compute time
                gamma=0, # loss reduction required to further partition (denominator)
                         # larger -> more conservative (less splits)
@@ -69,7 +77,7 @@ xgbcv.naive1 = xgb.cv(params = params.naive1,
                 nfold = 5,
                 showsd = T,
                 stratified = T,
-                silent = F,
+                silent = T,
                 early_stopping_rounds = 20,
                 maximize = F,
                 eval_metric = "logloss"
@@ -78,7 +86,7 @@ set.seed(2407)
 xgb.naive1 <- xgb.train(
     params = params.naive1,
     data = dtrain.naive,
-    nrounds = 500, #gbcv.naive1$best_iteration,
+    nrounds = xgbcv.naive1$best_iteration,
     print_every_n = 20,
     early_stopping_rounds = 10,
     watchlist = list(train=dtrain.naive),
@@ -122,25 +130,25 @@ params.rose1 = list(booster = "gbtree",
 
 # find best number of iterations
 set.seed(2407)
-# xgbcv.rose1 = xgb.cv(params = params.rose1,
-#                       data = dtrain.rose,
-#                       nrounds = 500,
-#                       nfold = 5,
-#                       showsd = T,
-#                       stratified = T,
-#                       silent = F,
-#                       early_stopping_rounds = 20,
-#                       maximize = F,
-#                       #eval_metric = "logloss"
-# )
+xgbcv.rose1 = xgb.cv(params = params.rose1,
+                      data = dtrain.rose,
+                      nrounds = 500,
+                      nfold = 5,
+                      showsd = T,
+                      stratified = T,
+                      silent = T,
+                      early_stopping_rounds = 20,
+                      maximize = F,
+                      eval_metric = "logloss"
+)
 set.seed(2407)
 xgb.rose1 <- xgb.train(
     params = params.rose1,
     data = dtrain.rose,
-    nrounds = 500, #xgbcv.rose1$best_iteration,
+    nrounds = xgbcv.rose1$best_iteration,
     print_every_n = 20,
-    early_stopping_rounds = 10,
-    watchlist = list(train=dtrain.naive),
+    #early_stopping_rounds = 10,
+    #watchlist = list(train=dtrain.rose),
     maximize = F,
     eval_metric = "logloss"
 )
@@ -156,7 +164,7 @@ cm.rose1 = caret::confusionMatrix(factor(ifelse(xgb.rose1_pred>CUT_OFF_HINGE_VAL
 cm.rose1
 
 pROC::auc(test_target, xgb.rose1_pred)
-pr.curve(log.predict.rose[testset$is_churn == 1], log.predict.rose[testset$is_churn == 0])
+pr.curve(xgb.rose1_pred[testset$is_churn == 1], xgb.rose1_pred[testset$is_churn == 0])
 
 
 
