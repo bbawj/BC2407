@@ -67,6 +67,43 @@ cleandf$payment_plan_days = factor(cleandf$payment_plan_days)
 cleandf$payment_method_id = factor(cleandf$payment_method_id)
 cleandf = na.omit(cleandf)
 summary(cleandf)
+sum(is.na(cleandf))
+
+#filter out relevant variables
+library(caret)
+library(Information)
+library(InformationValue)
+options(scipen = 999, digits=5)
+#obtain the IV values
+cleandf$is_churn = as.numeric(cleandf$is_churn)-1
+create_infotables(cleandf,y="is_churn")
+
+cleandf$is_churn = factor(cleandf$is_churn, levels=c(0,1), labels=c("not churn", "churn"))
+
+#choose only higher IV variables
+df = dummyVars(~is_churn+payment_method_id+is_auto_renew+payment_plan_days+actual_amount_paid
+               +plan_list_price+registered_via+bd+is_cancel+city+gender, data=cleandf)
+df = data.frame(predict(df, newdata = cleandf))
+
+### Correlation analysis ###
+library(dplyr)
+library(caret)
+
+cor = cor(df,use="pairwise.complete.obs")
+
+corTable = as.data.frame(as.table(cor))
+corTable = subset(corTable, abs(Freq) > 0.7 & abs(Freq) != 1)
+corTable[!duplicated(corTable[,c('Freq')]),]
+
+cor = findCorrelation(cor, cutoff=0.7)
+#remove correlated columns
+cor
+colnames(df)[cor]
+#we want to keep  paymentplandays based on domain knowledge
+finaldf = df[,-c(cor)]
+
+finaldf[, -62] = lapply(finaldf[,-62], function (x) factor(x))
+finaldf$gender. = NULL
 
 #### OR LOAD SMOTE ####
 # df = read.csv("smote.csv", stringsAsFactors = T)
@@ -88,39 +125,43 @@ library(caTools)
 library(caret)
 library(ROSE)
 library(pROC)
+library(PRROC)
 set.seed(2407)
 
-train <- sample.split(Y = cleandf$is_churn, SplitRatio = 0.7)
-trainset.naive <- subset(cleandf, train == T)
+colnames(finaldf)[1] = "is_churn"
+
+train <- sample.split(Y = finaldf$is_churn, SplitRatio = 0.7)
+trainset.naive <- subset(finaldf, train == T)
 trainset.rose = ROSE(is_churn~., data=trainset.naive, seed=2407)$data
-testset <- subset(cleandf, train == F)
+testset <- subset(finaldf, train == F)
 summary(trainset.naive$is_churn)
 summary(trainset.rose$is_churn)
 summary(testset$is_churn)
 
 
 #### BEGIN LOGISTIC REGRESSION ####
-log.naive = glm(is_churn ~ payment_method_id + plan_list_price + actual_amount_paid + is_auto_renew + 
-                  is_cancel + bd + gender + city + registered_via, family = binomial, data=trainset.naive)
+log.naive = glm(is_churn ~ ., family = binomial, data=trainset.naive)
 
-log.rose = glm(is_churn ~ payment_method_id + plan_list_price + actual_amount_paid + is_auto_renew + 
-                 is_cancel + bd + gender + city + registered_via, family = binomial, data=trainset.rose) 
+log.rose = glm(is_churn ~ ., family = binomial, data=trainset.rose) 
 
-summary(log.rose)
 threshold = 0.5
 
 # Confusion Matrix Naive
 log.predict.naive <- predict(log.naive, newdata = testset, type = 'response')
-log.class.naive <- ifelse(log.predict.naive > threshold, "churn", "not churn")
-confusionMatrix(as.factor(log.class.naive), reference=testset$is_churn, positive="churn", mode="prec_recall")
+log.class.naive <- ifelse(log.predict.naive > threshold, 1, 0)
+caret::confusionMatrix(factor(log.class.naive), reference=factor(testset$is_churn), positive="1", mode="prec_recall")
 auc(testset$is_churn, log.predict.naive)
+pr.curve(log.predict.naive[testset$is_churn == 1], log.predict.naive[testset$is_churn == 0])
+
+#get coefficients
+exp(coef(log.naive))
 
 # Confusion Matrix ROSE
 log.predict.rose <- predict(log.rose, newdata = testset, type = 'response')
-log.class.rose <- ifelse(log.predict.rose > threshold, "churn", "not churn")
-confusionMatrix(as.factor(log.class.rose), reference=testset$is_churn, positive="churn", mode="prec_recall")
-
+log.class.rose <- ifelse(log.predict.rose > threshold, 1, 0)
+caret::confusionMatrix(as.factor(log.class.rose), reference=factor(testset$is_churn), positive="1", mode="prec_recall")
 auc(testset$is_churn, log.predict.rose)
+pr.curve(log.predict.rose[testset$is_churn == 1], log.predict.rose[testset$is_churn == 0])
 
 #### END LOGISTIC REGRESSION ####
 
@@ -129,8 +170,7 @@ library(rpart)
 library(rpart.plot)
 
 # Naive CART 
-cart <- rpart(is_churn ~ payment_method_id + plan_list_price + actual_amount_paid + is_auto_renew + 
-                is_cancel + bd + gender + city + registered_via, data = trainset.naive, method = 'class', control = rpart.control(minsplit = 2, cp=0))
+cart <- rpart(is_churn ~ ., data = trainset.naive, method = 'class', control = rpart.control(minsplit = 2, cp=0))
 CVerror.cap <- cart$cptable[which.min(cart$cptable[,"xerror"]), "xerror"] + cart$cptable[which.min(cart$cptable[,"xerror"]), "xstd"]
 i <- 1; j<- 4
 
@@ -147,8 +187,7 @@ cart.naive$variable.importance
 #rpart.plot(cart.naive, nn = T) #-> uncomment to see plot of CART model (commenting out for smooth running of code)
 
 # ROSE cart
-cart <- rpart(is_churn ~ payment_method_id + plan_list_price + actual_amount_paid + is_auto_renew + 
-                is_cancel + bd + gender + city + registered_via, data = trainset.rose, method = 'class', control = rpart.control(minsplit = 2, cp=0))
+cart <- rpart(is_churn ~ ., data = trainset.rose, method = 'class', control = rpart.control(minsplit = 2, cp=0))
 CVerror.cap <- cart$cptable[which.min(cart$cptable[,"xerror"]), "xerror"] + cart$cptable[which.min(cart$cptable[,"xerror"]), "xstd"]
 i <- 1; j<- 4
 
@@ -162,15 +201,17 @@ round(100*cart.rose$variable.importance/sum(cart.rose$variable.importance))
 
 # confusion matrix naive
 cart.predict.naive = predict(cart.naive, newdata = testset, type="prob")[,2]
-cart.class.naive = ifelse(cart.predict.naive > threshold, "churn", "not churn")
-confusionMatrix(as.factor(cart.class.naive), reference=testset$is_churn, positive="churn", mode="prec_recall")
+cart.class.naive = ifelse(cart.predict.naive > threshold, 1, 0)
+caret::confusionMatrix(as.factor(cart.class.naive), reference=testset$is_churn, positive="1", mode="prec_recall")
 auc(testset$is_churn, cart.predict.naive)
+pr.curve(cart.predict.naive[testset$is_churn == "1"], cart.predict.naive[testset$is_churn == "0"])
 
-# confusion matrix naive
+# confusion matrix rose
 cart.predict.rose = predict(cart.rose, newdata = testset, type="prob")[,2]
-cart.class.rose = ifelse(cart.predict.rose > threshold, "churn", "not churn")
-confusionMatrix(as.factor(cart.class.rose), reference=testset$is_churn, positive="churn", mode="prec_recall")
+cart.class.rose = ifelse(cart.predict.rose > threshold, 1, 0)
+caret::confusionMatrix(as.factor(cart.class.rose), reference=testset$is_churn, positive="1", mode="prec_recall")
 auc(testset$is_churn, cart.predict.rose)
+pr.curve(cart.predict.rose[testset$is_churn == "1"], cart.predict.rose[testset$is_churn == "0"])
 #### END OF CART ####
 
 #### BEGIN NEURAL NET ####
@@ -216,27 +257,38 @@ mean(roundedresultsdf$actual == roundedresultsdf$prediction)
 library(randomForest)
 set.seed(2407)
 
-rf.naive = randomForest(is_churn ~ is_auto_renew + actual_amount_paid + payment_method_id +
-                          plan_list_price + payment_plan_days + is_cancel, data = trainset.naive, importance=T,
-                        ntree=250)
-rf.rose = randomForest(is_churn ~ is_auto_renew + actual_amount_paid + payment_method_id +
-                         plan_list_price + payment_plan_days + is_cancel, data = trainset.rose, importance=T,
-                       ntree=250)
-rf.naive
+rf.naive = randomForest(is_churn ~ ., data = trainset.naive, importance=T,
+                        ntree=100)
+rf.predict.naive = predict(rf.naive, newdata = testset, type="prob")
+rf.class.naive = ifelse(rf.predict.naive[,"1"] > threshold, 1, 0)
+caret::confusionMatrix(as.factor(rf.class.naive), reference=testset$is_churn, positive="1", mode="prec_recall")
+pr.curve(rf.predict.naive[testset$is_churn == "1", "1"], rf.predict.naive[testset$is_churn == "0", "1"])
+auc(testset$is_churn, rf.predict.naive[,"1"])
+
+rf.rose = randomForest(is_churn ~ ., data = trainset.rose, importance=T,
+                       ntree=100)
+rf.predict.rose = predict(rf.rose, newdata = testset, type="prob")[,"1"]
+
+rf.class.rose = ifelse(rf.predict.rose > threshold, 1, 0)
+caret::confusionMatrix(as.factor(rf.class.rose), reference=testset$is_churn, positive="1", mode="everything")
+pr.curve(rf.predict.rose[testset$is_churn == "1"], rf.predict.rose[testset$is_churn == "0"], curve=T)
+auc(testset$is_churn, rf.predict.rose)
+plot(roc(testset$is_churn, rf.predict.rose, plot=T))
+plot(rf.pr.rose)
+
 #precision
 850/(850+154)
 850/(850+7607)
-auc(trainset.naive$is_churn, rf.naive$votes[,2])
 
-rf.rose
 #precision and recall
 112418/(112418+8524)
 112418/(112418+5945)
-auc(trainset.rose$is_churn, rf.rose$votes[,2])
-
+rf.naive
+rf.rose
+rf.predict.rose
 plot(rf.rose)
 importance(rf.rose)
-
+varImpPlot(rf.rose)
 
 
 
