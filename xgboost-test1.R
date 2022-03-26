@@ -167,12 +167,16 @@ pROC::auc(test_target, xgb.rose1_pred)
 pr.curve(xgb.rose1_pred[testset$is_churn == 1], xgb.rose1_pred[testset$is_churn == 0])
 
 
+##### save xgboost models #####
 
+xgboost_models = list(xgb.rose1, xgb.naive1, xgbcv.rose1, xgbcv.rose1)
+saveRDS(xgboost_models, file="xgboost_models")
+load(xgboost_models)
 
-
-
-
-
+xgb.naive.predictions = data.table(ifelse(xgb.naive1_pred>CUT_OFF_HINGE_VAL, 1, 0))
+xgb.rose.predictions = data.table(ifelse(xgb.rose1_pred>CUT_OFF_HINGE_VAL, 1, 0))
+fwrite(xgb.naive.predictions, "xgb_naive_predictions.csv")
+fwrite(xgb.rose.predictions, "xgb_rose_predictions.csv")
 
 
 ##### rebalanced #####
