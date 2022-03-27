@@ -1,2 +1,6 @@
 .RData
 .Rhistory
+testset.csv
+trainset_naive.csv
+trainset_rose.csv
+var_removed_one_hot.csv
