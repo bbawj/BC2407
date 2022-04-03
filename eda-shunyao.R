@@ -2,7 +2,7 @@
 library(ggplot2)
 library(data.table)
 library(lubridate)
-clean_path = "clean.csv"
+clean_path = "C:/Users/shuny/Documents/UNI/BC2407 Analytics II/project/kkbox/clean.csv"
 df = fread(clean_path, stringsAsFactors = F, encoding="UTF-8")
 
 
@@ -19,6 +19,9 @@ df$date = ymd(df$date)
 df$is_churn = factor(df$is_churn, levels= c(0,1), labels=c("renewal","churn"))
 df$is_auto_renew = factor(df$is_auto_renew, levels= c(0,1), labels=c("non-auto renewal","auto-renewal"))
 df$is_cancel = factor(df$is_cancel, levels= c(0,1), labels=c("non-cancellation","cancellation"))
+df$payment_method_id = factor(df$payment_method_id)
+df$registered_via = factor(df$registered_via)
+df$payment_plan_days =factor(df$payment_plan_days)
 df$corrected_churn = NULL
 summary(df)
 str(df)
@@ -132,7 +135,7 @@ ggplot(long, aes(value, fill=is_churn))+
     labs(x = "Number of songs",
          y = "Proportion of users",
          title = "Proportion of users that churn, classified by number of songs played a % duration")
-cat("There is not much difference in the distribution of churn against the number of songs 
+cat("There is not much difference in the distribution of churn against the number of songs
     played for each % of duration.")
 
 #number of unique songs
@@ -149,3 +152,28 @@ ggplot(df, aes(total_secs, fill=is_churn))+
          y = "Proportion of users",
          title = "Proportion of users that churn, classified by total seconds listened")
 cat("The distribution of total seconds listened is similar between those who renew and those who churn")
+
+
+
+
+summary(df$payment_method_id)
+# see payment method id vs churn %
+ggplot(df, aes(payment_method_id, fill = is_churn)) +
+    geom_bar(position="fill") +
+    scale_fill_manual(values=c("#00BFC4","#F8766D"))
+
+
+ggplot(df, aes(payment_plan_days, fill = is_churn)) +
+    geom_bar(position="fill") +
+    scale_fill_manual(values=c("#00BFC4","#F8766D"))
+
+
+
+'library(tidyverse)
+df %>% group_by(payment_method_id, is_churn)
+
+
+
+
+
+
