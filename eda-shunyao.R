@@ -154,23 +154,17 @@ ggplot(df, aes(total_secs, fill=is_churn))+
 cat("The distribution of total seconds listened is similar between those who renew and those who churn")
 
 
-
-
-summary(df$payment_method_id)
-# see payment method id vs churn %
+# see payment method id vs churn
 ggplot(df, aes(payment_method_id, fill = is_churn)) +
     geom_bar(position="fill") +
     scale_fill_manual(values=c("#00BFC4","#F8766D"))
 
-
+# see payment plan days vs churn
 ggplot(df, aes(payment_plan_days, fill = is_churn)) +
     geom_bar(position="fill") +
     scale_fill_manual(values=c("#00BFC4","#F8766D"))
 
 
-
-'library(tidyverse)
-df %>% group_by(payment_method_id, is_churn)
 
 
 
