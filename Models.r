@@ -21,7 +21,7 @@ cleandf = na.omit(cleandf)
 summary(cleandf)
 sum(is.na(cleandf))
 
-#filter out relevant variables
+##### Attribute Relevance Analysis ####
 library(caret)
 library(Information)
 library(InformationValue)
@@ -32,7 +32,7 @@ ivs = create_infotables(cleandf,y="is_churn")
 ivs
 cleandf$is_churn = factor(cleandf$is_churn, levels=c(0,1), labels=c("not churn", "churn"))
 
-#choose only higher IV variables
+#choose only IV determiend predictive variables
 df = dummyVars(~is_churn+payment_method_id+is_auto_renew+payment_plan_days+actual_amount_paid
                +plan_list_price+registered_via+bd+is_cancel+city+gender, data=cleandf)
 df = data.frame(predict(df, newdata = cleandf))
@@ -56,7 +56,7 @@ finaldf[, -c(63,57)] = lapply(finaldf[,-c(63,57)], function (x) factor(x))
 
 #### END Data Cleaning ####
 
-#train-test split
+#### BEGIN train-test split ####
 library(caTools)
 library(caret)
 library(ROSE)
@@ -66,9 +66,6 @@ set.seed(2407)
 
 colnames(finaldf)[1] = "is_churn"
 
-# dashtrain <- sample.split(Y = cleandf$is_churn, SplitRatio = 0.7)
-# dashtest = subset(cleandf, train == F)
-
 train <- sample.split(Y = finaldf$is_churn, SplitRatio = 0.7)
 trainset.naive <- subset(finaldf, train == T)
 trainset.rose = ROSE(is_churn~., data=trainset.naive, seed=2407)$data
@@ -77,9 +74,12 @@ summary(trainset.naive$is_churn)
 summary(trainset.rose$is_churn)
 summary(testset$is_churn)
 
-write.csv(trainset.naive, "trainset_naive.csv")
-write.csv(trainset.rose, "trainset_rose.csv")
-write.csv(testset, "testset.csv")
+# Output csvs for easy use
+# write.csv(trainset.naive, "trainset_naive.csv")
+# write.csv(trainset.rose, "trainset_rose.csv")
+# write.csv(testset, "testset.csv")
+
+#### END TRAIN-TEST SPLIT ####
 
 #### BEGIN LOGISTIC REGRESSION ####
 log.naive = glm(is_churn ~ ., family = binomial, data=trainset.naive)
@@ -102,12 +102,15 @@ caret::confusionMatrix(as.factor(log.class.rose), reference=factor(testset$is_ch
 auc(testset$is_churn, log.predict.rose)
 pr.curve(log.predict.rose[testset$is_churn == 1], log.predict.rose[testset$is_churn == 0])
 
-#get importance
-coeffs = data.frame(varImp(log.rose))
-rownames(coeffs)[rownames(coeffs) == "bd"] = "bd1"
-rownames(coeffs)[rownames(coeffs) == "actual_amount_paid"] = "actual_amount_paid1"
-rownames(coeffs) = lapply(rownames(coeffs), function(x) substr(x,1,nchar(x)-1))
+# Get model coefficient CI and Odds Ratio
+kkbox.confint = stats::confint.default(kkbox.lm) %>% data.table(keep.rownames = T)
+kkbox.confint[,rn := gsub("(.+)1", "\\1", rn)]
+kkbox.confint.excludezero = kkbox.confint[`2.5 %`>0 | `97.5 %`<0,][, `absolute val`:= ifelse(`2.5 %`>0, `2.5 %`, abs(`97.5 %`))]
+kkbox.significant = kkbox.confint.excludezero[order(`absolute val`, decreasing = T)][, `odds ratio`:= exp(`absolute val`)][1:15,] %>% mutate_if(is.numeric, round, 3)
 
+kkbox.significant
+
+# output csv for dashboard use
 # dashboard = cbind(dashtest, PR=log.predict.rose)
 # write.csv(dashboard, "dashboard.csv", row.names = F)
 
@@ -185,13 +188,6 @@ pr.curve(rf.predict.rose[testset$is_churn == "1"], rf.predict.rose[testset$is_ch
 plot(roc(testset$is_churn, rf.predict.rose, plot=T))
 plot(rf.pr.rose)
 
-#precision
-850/(850+154)
-850/(850+7607)
-
-#precision and recall
-112418/(112418+8524)
-112418/(112418+5945)
 rf.naive
 rf.rose
 rf.predict.rose
@@ -199,6 +195,6 @@ plot(rf.rose)
 importance(rf.rose)
 varImpPlot(rf.rose)
 
-
+#### END random forest ####
 
 
